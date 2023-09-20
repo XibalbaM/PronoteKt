@@ -42,7 +42,6 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     private var rsaModulo: String? = null
     private var rsaExponent: Int? = null
     var identifiantNav: String = ""
-    @OptIn(ExperimentalStdlibApi::class)
     var iv = ByteArray(16)
 
     suspend fun initSession() {
@@ -51,8 +50,12 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         identifiantNav = response?.get("identifiantNav")?.asString ?: throw Exception("Error while initializing session")
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     suspend fun login(username: String, password: String): Boolean {
+        //INIT
         initSession()
+
+        //STEP 1
         val identificationResponse = doRequest(
             "Identification", includeDefaultData = false, data = mapOf(
                 "genreConnexion" to 0,
@@ -66,9 +69,35 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                 "uuidAppliMobile" to "",
                 "loginTokenSAV" to "",
             )
+        ) ?: return false.also { println("An error occurred during first login request") }
+        val challenge = identificationResponse.get("challenge")?.asString ?: return false.also { println("An error occurred during first login request") }
+        println("Challenge: $challenge")
+        var randomString = identificationResponse.get("alea")?.asString ?: ""
+        randomString = randomString.substring(1, randomString.length - 1)
+        println("Random string: $randomString")
+        val usernameToUse = if (identificationResponse.get("modeCompLog")?.asInt == 1) username.lowercase() else username
+        println("Username to use: $usernameToUse")
+        val passwordToUse = if (identificationResponse.get("modeCompMdp")?.asInt == 1) password.lowercase() else password
+        println("Password to use: $passwordToUse")
+
+        //STEP 2
+        val mtp = sha256("$randomString$passwordToUse".toByteArray()).toHexString().uppercase()
+        println("MTP: $mtp")
+        val decryptedChallenge = aesDecrypt(challenge.hexToByteArray(), md5("$usernameToUse$mtp"))
+        println("Decrypted challenge: ${decryptedChallenge.toHexString()}")
+        val solvedChallenge = aesEncrypt(decryptedChallenge.filterIndexed { index, _ -> index % 2 == 0 }.toString()).toHexString()
+        println("Solved challenge: $solvedChallenge")
+
+        //STEP 3
+        val authResponse = doRequest(
+            "Authentification", includeDefaultData = false, data = mapOf(
+                "connexion" to 0,
+                "challenge" to solvedChallenge,
+                "espace" to sessionType.id
+            )
         )
-        println(identificationResponse)
-        return identificationResponse != null
+        println(authResponse)
+        return authResponse?.get("libelleUtil")?.asString != null
     }
 
     private suspend fun doRequest(name: String, data: Map<String, Any> = emptyMap(), includeDefaultData: Boolean = true): JsonObject? {
@@ -101,7 +130,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     @OptIn(ExperimentalStdlibApi::class)
     private fun getNumeroOrdre(): String {
         println("Request counter: $requestCounter")
-        val numeroOrdre = aesEncrypt(requestCounter.toString()).toHexString().uppercase()
+        val numeroOrdre = aesEncrypt(requestCounter.toString()).toHexString()
         println("Numero ordre: $numeroOrdre")
         requestCounter += 2
         return numeroOrdre
@@ -115,6 +144,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         random.nextBytes(iv)
         println("IV: ${iv.toHexString()}")
         uuid = base64Encode(iv)
+        iv = md5(iv)
         return uuid!!
     }
 
