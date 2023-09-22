@@ -31,13 +31,23 @@ class PronoteKtTest {
 
     @Test
     fun testGetUuid() {
-        assertNotNull(pronoteKt.getUuid())
-        println("UUID: ${pronoteKt.getUuid()}")
-        assertEquals("qwwii4iQPq20HEmy53Dp2A==".length, pronoteKt.getUuid().length)
+        assertNotNull(pronoteKt.getUuid().first)
+        assertEquals("qwwii4iQPq20HEmy53Dp2A==".length, pronoteKt.getUuid().first.length)
     }
-//TODO: Le probleme est que le serveur ne recoit pas le bon IV
+
+    @Test
+    fun testInit() = runTest {
+        assert(pronoteKt.initSession())
+    }
+
     @Test
     fun testLogin() = runTest {
         assert(pronoteKt.login("demonstration", "pronotevs"))
+    }
+
+    @Test
+    fun testGetUserData() = runTest {
+        pronoteKt.login("demonstration", "pronotevs")
+        assertNotNull(pronoteKt.getUserData())
     }
 }

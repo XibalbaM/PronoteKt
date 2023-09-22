@@ -11,6 +11,7 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.gson.*
+import java.security.MessageDigest
 import java.security.SecureRandom
 
 
@@ -41,23 +42,29 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     private var uuid: String? = null
     private var rsaModulo: String? = null
     private var rsaExponent: Int? = null
+    private var userData: JsonObject? = null
     var identifiantNav: String = ""
+    var key = "".toByteArray()
     var iv = ByteArray(16)
 
-    suspend fun initSession() {
-        if (identifiantNav.isNotEmpty()) return
-        val response = doRequest("FonctionParametres")
-        identifiantNav = response?.get("identifiantNav")?.asString ?: throw Exception("Error while initializing session")
+    suspend fun initSession(): Boolean {
+        if (identifiantNav.isNotEmpty()) return true
+        val uuid1 = getUuid()
+        val response = doRequest("FonctionParametres", mapOf("Uuid" to uuid1.first))
+        identifiantNav = response?.get("identifiantNav")?.asString ?: return false.also { println("Error while initializing session") }
+        iv = uuid1.second
+        return true
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
+    @OptIn(ExperimentalStdlibApi::class, ExperimentalUnsignedTypes::class)
     suspend fun login(username: String, password: String): Boolean {
+        if (isLogged()) return true
         //INIT
-        initSession()
+        if (!initSession()) return false
 
         //STEP 1
         val identificationResponse = doRequest(
-            "Identification", includeDefaultData = false, data = mapOf(
+            "Identification", data = mapOf(
                 "genreConnexion" to 0,
                 "genreEspace" to sessionType.id,
                 "identifiant" to username,
@@ -71,41 +78,43 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             )
         ) ?: return false.also { println("An error occurred during first login request") }
         val challenge = identificationResponse.get("challenge")?.asString ?: return false.also { println("An error occurred during first login request") }
-        println("Challenge: $challenge")
-        var randomString = identificationResponse.get("alea")?.asString ?: ""
-        randomString = randomString.substring(1, randomString.length - 1)
-        println("Random string: $randomString")
+        val randomString = identificationResponse.get("alea")?.asString ?: ""
         val usernameToUse = if (identificationResponse.get("modeCompLog")?.asInt == 1) username.lowercase() else username
-        println("Username to use: $usernameToUse")
         val passwordToUse = if (identificationResponse.get("modeCompMdp")?.asInt == 1) password.lowercase() else password
-        println("Password to use: $passwordToUse")
 
         //STEP 2
-        val mtp = sha256("$randomString$passwordToUse".toByteArray()).toHexString().uppercase()
-        println("MTP: $mtp")
-        val decryptedChallenge = aesDecrypt(challenge.hexToByteArray(), md5("$usernameToUse$mtp"))
-        println("Decrypted challenge: ${decryptedChallenge.toHexString()}")
-        val solvedChallenge = aesEncrypt(decryptedChallenge.filterIndexed { index, _ -> index % 2 == 0 }.toString()).toHexString()
-        println("Solved challenge: $solvedChallenge")
+        val mtp = MessageDigest.getInstance("SHA-256").digest((randomString + passwordToUse).toByteArray()).toHexString().uppercase()
+        val key = (usernameToUse + mtp).toByteArray()
+        val decryptedChallenge = aesDecrypt(challenge.hexToByteArray(), key).decodeToString()
+        val modifiedChallenge = decryptedChallenge.filterIndexed { index, _ -> index % 2 == 0 }
+        val byteChallenge = modifiedChallenge.toByteArray()
+        val solvedChallenge = aesEncrypt(byteChallenge, key).toHexString()
 
         //STEP 3
         val authResponse = doRequest(
-            "Authentification", includeDefaultData = false, data = mapOf(
+            "Authentification", data = mapOf(
                 "connexion" to 0,
                 "challenge" to solvedChallenge,
                 "espace" to sessionType.id
             )
-        )
-        println(authResponse)
-        return authResponse?.get("libelleUtil")?.asString != null
+        ) ?: return false.also { println("An error occurred during second login request") }
+        val newKeyEncrypted = authResponse.get("cle")?.asString ?: return false.also { println("An error occurred during second login request") }
+        this.key = aesDecrypt(newKeyEncrypted.hexToByteArray(), key)
+            .decodeToString()
+            .split(",")
+            .map { it.toUByte() }
+            .toUByteArray().toByteArray() //TODO: Not working
+        return authResponse.get("libelleUtil")?.asString != null
     }
 
-    private suspend fun doRequest(name: String, data: Map<String, Any> = emptyMap(), includeDefaultData: Boolean = true): JsonObject? {
+    fun isLogged(): Boolean {
+        return key.isNotEmpty()
+    }
+
+    private suspend fun doRequest(name: String, data: Map<String, Any> = emptyMap()): JsonObject? {
         val sessionId = getSessionId()
         val numeroOrdre = getNumeroOrdre()
-        val uuid = getUuid()
-        val dataToSend = if (includeDefaultData) data.plus(mapOf("Uuid" to uuid, "identifiantNav" to identifiantNav)) else data
-        val body = createJsonForRequest(name, sessionId, numeroOrdre, dataToSend)
+        val body = createJsonForRequest(name, sessionId, numeroOrdre, data)
         val response = ktorClient.post("$pronoteUrl/appelfonction/${sessionType.id}/$sessionId/$numeroOrdre") {
             contentType(ContentType.Application.Json)
             setBody(body)
@@ -130,22 +139,20 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     @OptIn(ExperimentalStdlibApi::class)
     private fun getNumeroOrdre(): String {
         println("Request counter: $requestCounter")
-        val numeroOrdre = aesEncrypt(requestCounter.toString()).toHexString()
+        println("IV: ${iv.toHexString()}")
+        val numeroOrdre = aesEncrypt(requestCounter.toString().toByteArray()).toHexString()
         println("Numero ordre: $numeroOrdre")
         requestCounter += 2
         return numeroOrdre
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
-    fun getUuid(): String {
-        if (uuid != null) return uuid!!
+    fun getUuid(): Pair<String, ByteArray> {
+        if (uuid != null) return uuid!! to iv
         val random: SecureRandom = SecureRandom.getInstanceStrong()
-        iv = ByteArray(16)
-        random.nextBytes(iv)
-        println("IV: ${iv.toHexString()}")
-        uuid = base64Encode(iv)
-        iv = md5(iv)
-        return uuid!!
+        val newIv = ByteArray(16)
+        random.nextBytes(newIv)
+        uuid = base64Encode(newIv)
+        return uuid!! to md5(newIv)
     }
 
     fun createJsonForRequest(name: String, sessionId: Int, numeroOrdre: String, otherData: Map<String, Any> = emptyMap()): JsonObject {
@@ -198,6 +205,15 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    suspend fun getUserData(): JsonObject? {
+        if (!isLogged()) return null.also { println("Must be logged") }
+        if (userData != null) return userData
+        val response = doRequest("ParametresUtilisateur")
+        userData = response
+        println(userData)
+        return userData
     }
 }
 
