@@ -1,5 +1,6 @@
 import fr.xibalba.pronoteKt.PronoteKt
 import fr.xibalba.pronoteKt.SessionType
+import fr.xibalba.pronoteKt.getTimetable
 import kotlinx.coroutines.test.runTest
 
 import org.junit.jupiter.api.BeforeAll
@@ -10,11 +11,16 @@ import kotlin.test.assertNotEquals
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PronoteKtRequestsTest {
 
-    val pronoteKt = PronoteKt("https://demo.index-education.net/pronote", SessionType.STUDENT)
+    private val pronoteKt = PronoteKt("https://demo.index-education.net/pronote", SessionType.STUDENT)
 
     @BeforeAll
     fun init() = runTest {
-        pronoteKt.initSession()
-        assertNotEquals("", pronoteKt.identifiantNav)
+        assert(pronoteKt.login("demonstration", "pronotevs"))
+    }
+
+    @Test
+    fun testGetTimetable() = runTest {
+        val timetable = pronoteKt.getTimetable()
+        assertNotEquals(timetable.size, 0)
     }
 }

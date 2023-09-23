@@ -15,7 +15,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 
-class PronoteKt(private val pronoteUrl: String, private val sessionType: SessionType) {
+class PronoteKt(private val pronoteUrl: String, private val sessionType: SessionType, private val debug: Boolean = false) {
 
     private val ktorClient = HttpClient(CIO) {
         install(UserAgent) {
@@ -26,15 +26,17 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                 disableHtmlEscaping()
             }
         }
-        install(Logging) {
-            logger = object : Logger {
-                override fun log(message: String) {
-                    println("--------------------------------------------------------------------------")
-                    println(message)
+        if (debug) {
+            install(Logging) {
+                logger = object : Logger {
+                    override fun log(message: String) {
+                        println("--------------------------------------------------------------------------")
+                        println(message)
+                    }
                 }
+                level = LogLevel.ALL
+                filter { it.method != HttpMethod.Get }
             }
-            level = LogLevel.ALL
-            filter { it.method != HttpMethod.Get }
         }
     }
     private var requestCounter = 1
@@ -56,7 +58,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         return true
     }
 
-    @OptIn(ExperimentalStdlibApi::class, ExperimentalUnsignedTypes::class)
+    @OptIn(ExperimentalStdlibApi::class)
     suspend fun login(username: String, password: String): Boolean {
         if (isLogged()) return true
         //INIT
@@ -104,7 +106,6 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             .split(",")
             .map { it.toInt().toByte() }
             .toByteArray() //TODO: Not working
-        println("Key: ${this.key.decodeToString()}")
         return authResponse.get("libelleUtil")?.asString != null
     }
 
@@ -112,10 +113,10 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         return key.isNotEmpty()
     }
 
-    private suspend fun doRequest(name: String, data: Map<String, Any> = emptyMap()): JsonObject? {
+    suspend fun doRequest(name: String, data: Map<String, Any> = emptyMap(), page: Int = -1): JsonObject? {
         val sessionId = getSessionId()
         val numeroOrdre = getNumeroOrdre()
-        val body = createJsonForRequest(name, sessionId, numeroOrdre, data)
+        val body = createJsonForRequest(name, sessionId, numeroOrdre, data, page)
         val response = ktorClient.post("$pronoteUrl/appelfonction/${sessionType.id}/$sessionId/$numeroOrdre") {
             contentType(ContentType.Application.Json)
             setBody(body)
@@ -139,10 +140,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
 
     @OptIn(ExperimentalStdlibApi::class)
     private fun getNumeroOrdre(): String {
-        println("Request counter: $requestCounter")
-        println("IV: ${iv.toHexString()}")
         val numeroOrdre = aesEncrypt(requestCounter.toString().toByteArray()).toHexString()
-        println("Numero ordre: $numeroOrdre")
         requestCounter += 2
         return numeroOrdre
     }
@@ -156,7 +154,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         return uuid!! to md5(newIv)
     }
 
-    fun createJsonForRequest(name: String, sessionId: Int, numeroOrdre: String, otherData: Map<String, Any> = emptyMap()): JsonObject {
+    fun createJsonForRequest(name: String, sessionId: Int, numeroOrdre: String, otherData: Map<String, Any> = emptyMap(), page: Int = -1): JsonObject {
         val builder = StringBuilder()
         builder.append("{")
         builder.append("\"nom\":\"$name\",")
@@ -173,7 +171,14 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                 }
             }
             builder.deleteCharAt(builder.length - 1)
+            builder.append("},")
+        }
+        if (page != -1) {
+            builder.append("\"_Signature_\":{")
+            builder.append("\"onglet\":$page")
             builder.append("}")
+        } else if (otherData.isNotEmpty()) {
+            builder.deleteCharAt(builder.length - 1)
         }
         builder.append("}")
         builder.append("}")
@@ -206,13 +211,16 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         }
     }
 
-    suspend fun getUserData(): JsonObject? {
-        if (!isLogged()) return null.also { println("Must be logged") }
-        if (userData != null) return userData
+    suspend fun getUserData(): JsonObject? = requireLogin {
+        if (userData != null) userData
         val response = doRequest("ParametresUtilisateur")
         userData = response
-        println(userData)
-        return userData
+        userData
+    }
+
+    suspend fun <T> requireLogin(function: suspend PronoteKt.() -> T): T {
+        if (!isLogged()) throw IllegalStateException("Must be logged")
+        return function()
     }
 }
 
