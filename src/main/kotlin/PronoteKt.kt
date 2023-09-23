@@ -102,8 +102,9 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         this.key = aesDecrypt(newKeyEncrypted.hexToByteArray(), key)
             .decodeToString()
             .split(",")
-            .map { it.toUByte() }
-            .toUByteArray().toByteArray() //TODO: Not working
+            .map { it.toInt().toByte() }
+            .toByteArray() //TODO: Not working
+        println("Key: ${this.key.decodeToString()}")
         return authResponse.get("libelleUtil")?.asString != null
     }
 
@@ -161,8 +162,8 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         builder.append("\"nom\":\"$name\",")
         builder.append("\"session\":$sessionId,")
         builder.append("\"numeroOrdre\":\"$numeroOrdre\",")
+        builder.append("\"donneesSec\": {")
         if (otherData.isNotEmpty()) {
-            builder.append("\"donneesSec\": {")
             builder.append("\"donnees\": {")
             otherData.forEach { (key, value) ->
                 if (value is String) {
@@ -173,10 +174,8 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             }
             builder.deleteCharAt(builder.length - 1)
             builder.append("}")
-            builder.append("}")
-        } else {
-            builder.deleteCharAt(builder.length - 1)
         }
+        builder.append("}")
         builder.append("}")
         return JsonParser.parseString(builder.toString()).asJsonObject
     }
