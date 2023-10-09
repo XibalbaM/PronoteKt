@@ -7,15 +7,16 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.cookies.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.*
 import io.ktor.http.*
 import io.ktor.serialization.gson.*
 import java.security.MessageDigest
 import java.security.SecureRandom
 
-
-class PronoteKt(private val pronoteUrl: String, private val sessionType: SessionType, private val debug: Boolean = false) {
+class PronoteKt(private val pronoteUrl: String, private val sessionType: SessionType, private val ent: Ent? = null, private val debug: Boolean = false) {
 
     private val ktorClient = HttpClient(CIO) {
         install(UserAgent) {
@@ -26,6 +27,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                 disableHtmlEscaping()
             }
         }
+        install(HttpCookies)
         if (debug) {
             install(Logging) {
                 logger = object : Logger {
@@ -35,7 +37,6 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                     }
                 }
                 level = LogLevel.ALL
-                filter { it.method != HttpMethod.Get }
             }
         }
     }
@@ -48,6 +49,8 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     var identifiantNav: String = ""
     var key = "".toByteArray()
     var iv = ByteArray(16)
+    var entUsername: String? = null
+    var entPassword: String? = null
 
     suspend fun initSession(): Boolean {
         if (identifiantNav.isNotEmpty()) return true
@@ -58,18 +61,65 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         return true
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
+    suspend fun initEnt(url: String, username: String, password: String): Boolean {
+        if (ktorClient.cookies(pronoteUrl).isNotEmpty()) return true
+        val entUrlResponse = ktorClient.get(url)
+        val entUrlBody: String = entUrlResponse.body()
+        val samlRequest = Regex("name=\"SAMLRequest\" value=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)
+        val relayState = Regex("name=\"RelayState\" value=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)
+        val loginUrl = Regex("action=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
+        val response2 = ktorClient.post(loginUrl!!) {
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(
+                FormDataContent(Parameters.build {
+                    append("SAMLRequest", samlRequest!!)
+                    append("RelayState", relayState!!)
+                })
+            )
+        }
+        val response3 = ktorClient.post(response2.headers["Location"]!!) {
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(FormDataContent(Parameters.build {
+                append("j_username", username)
+                append("j_password", password)
+                append("_eventId_proceed", "")
+            }))
+        }
+        val body3: String = response3.body()
+        val samlResponse = Regex("name=\"SAMLResponse\" value=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)
+        val relayStateResponse = Regex("name=\"RelayState\" value=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)
+        val url4 = Regex("action=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
+        ktorClient.post(url4!!) {
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(FormDataContent(Parameters.build {
+                append("SAMLResponse", samlResponse!!)
+                append("RelayState", relayStateResponse!!)
+            }))
+        }.body<String>()
+        return true
+    }
+
     suspend fun login(username: String, password: String): Boolean {
         if (isLogged()) return true
+        return if (ent?.complexMethod != null) {
+            ent.complexMethod.invoke(this)
+        } else {
+            normalLogin(username, password)
+        }
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    private suspend fun normalLogin(username: String, password: String): Boolean {
+        //ENT
+        if (ent?.params?.url != null) initEnt(ent.params.url, username, password)
         //INIT
         if (!initSession()) return false
-
         //STEP 1
         val identificationResponse = doRequest(
             "Identification", data = mapOf(
                 "genreConnexion" to 0,
                 "genreEspace" to sessionType.id,
-                "identifiant" to username,
+                "identifiant" to if (ent != null) entUsername!! else username,
                 "pourENT" to false,
                 "enConnexionAuto" to false,
                 "demandeConnexionAuto" to false,
@@ -81,12 +131,13 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         ) ?: return false.also { println("An error occurred during first login request") }
         val challenge = identificationResponse.get("challenge")?.asString ?: return false.also { println("An error occurred during first login request") }
         val randomString = identificationResponse.get("alea")?.asString ?: ""
-        val usernameToUse = if (identificationResponse.get("modeCompLog")?.asInt == 1) username.lowercase() else username
-        val passwordToUse = if (identificationResponse.get("modeCompMdp")?.asInt == 1) password.lowercase() else password
+        val usernameToUse = if (ent != null) entUsername!! else if (identificationResponse.get("modeCompLog")?.asInt == 1) username.lowercase() else username
+        val passwordToUse = if (ent != null) entPassword!! else if (identificationResponse.get("modeCompMdp")?.asInt == 1) password.lowercase() else password
 
         //STEP 2
         val mtp = MessageDigest.getInstance("SHA-256").digest((randomString + passwordToUse).toByteArray()).toHexString().uppercase()
-        val key = (usernameToUse + mtp).toByteArray()
+        val key = if (ent != null) MessageDigest.getInstance("SHA-256").digest(passwordToUse.toByteArray()).toHexString().uppercase()
+            .toByteArray() else (usernameToUse + mtp).toByteArray()
         val decryptedChallenge = aesDecrypt(challenge.hexToByteArray(), key).decodeToString()
         val modifiedChallenge = decryptedChallenge.filterIndexed { index, _ -> index % 2 == 0 }
         val byteChallenge = modifiedChallenge.toByteArray()
@@ -105,7 +156,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             .decodeToString()
             .split(",")
             .map { it.toInt().toByte() }
-            .toByteArray() //TODO: Not working
+            .toByteArray()
         return authResponse.get("libelleUtil")?.asString != null
     }
 
@@ -131,6 +182,10 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             val sessionIdResponse = ktorClient.get("$pronoteUrl${sessionType.url}")
             val body: String = sessionIdResponse.body()
             sessionId = Regex("h:'(\\d+)'").find(body)?.groupValues?.get(1)?.toInt()
+            if (ent != null) {
+                entUsername = Regex("e:'([^']+)'").find(body)?.groupValues?.get(1)
+                entPassword = Regex("f:'([^']+)'").find(body)?.groupValues?.get(1)
+            }
             return sessionId!!
         } catch (e: Exception) {
             e.printStackTrace()
@@ -226,4 +281,14 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
 
 enum class SessionType(val url: String, val jsUrl: String, val id: Int) {
     STUDENT("/eleve.html", "/E_3_C_45ECDEFA6864C78D6AD2329314EC027A1AB045043D8F4F93A09EF7DFE131B197_L_1036/eleve.js", 3)
+}
+
+enum class Ent(val params: NormalEntParams? = null, val complexMethod: (PronoteKt.() -> Boolean)? = null) {
+    AUVERGNE_RHONE_ALPES(NormalEntParams("https://cas.ent.auvergnerhonealpes.fr/login?selection=EDU&service=https://example.com/", NormalEntType.CAS_EDU))
+}
+
+data class NormalEntParams(val url: String, val type: NormalEntType, val redirectForm: Boolean = true)
+
+enum class NormalEntType {
+    CAS_EDU
 }

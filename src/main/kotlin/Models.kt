@@ -25,13 +25,9 @@ data class Lesson(
     @SerializedName("CouleurFond")
     val color: String,
     @SerializedName("ListeContenus")
-    @JsonAdapter(VListLPairDeserializer::class)
-    private val subjectAndTeacher: Pair<String, String>
+    @JsonAdapter(VListLListDeserializer::class)
+    private val courseInfo: List<String>
 ) {
     val date: LocalDate
         get() = LocalDate.parse(dateString, DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))
-    val subject: String
-        get() = subjectAndTeacher.first
-    val teacher: String
-        get() = subjectAndTeacher.second
 }

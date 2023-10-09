@@ -1,9 +1,66 @@
+import java.net.URI
+
 plugins {
     kotlin("jvm") version "1.9.0"
+    id("maven-publish")
+    id("signing")
 }
 
-group = "fr.xibalba"
-version = "1.0-SNAPSHOT"
+group = "io.github.xibalbam"
+version = "1.1"
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = "io.github.xibalbam"
+            artifactId = "pronoteKt"
+            version = "1.1"
+
+            from(components["java"])
+
+            pom {
+                name = "Pronote Kt"
+                description = "A Kotlin library to interact with Pronote"
+                url = "https://github.com/XibalbaM/PronoteKt"
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("Xibalba")
+                        name.set("Xibalba")
+                        email.set("maelporret@outlook.fr")
+                    }
+                }
+                scm {
+                    connection = "scm:git:git://github.com/XibalbaM/PronoteKt.git"
+                    developerConnection = "scm:git:ssh://github.com/XibalbaM/PronoteKt.git"
+                    url = "https://github.com/XibalbaM/PronoteKt"
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            credentials {
+                if (!(project.hasProperty("NEXUS_USERNAME") && project.hasProperty("NEXUS_PASSWORD")))
+                    throw IllegalStateException("NEXUS_USERNAME and NEXUS_PASSWORD must be set as project properties")
+                username = project.properties["NEXUS_USERNAME"].toString()
+                password = project.properties["NEXUS_PASSWORD"].toString()
+            }
+
+            name = "pronoteKt"
+            url = URI("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+        }
+    }
+}
+
+signing {
+    sign(publishing.publications["maven"])
+}
 
 repositories {
     mavenCentral()
@@ -28,4 +85,9 @@ tasks.test {
 
 kotlin {
     jvmToolchain(8)
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
 }

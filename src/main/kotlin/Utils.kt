@@ -18,8 +18,8 @@ class VDeserializer<T> : JsonDeserializer<T> {
     }
 }
 
-class VListLPairDeserializer : JsonDeserializer<Pair<String, String>> {
-    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): Pair<String, String> {
+class VListLListDeserializer : JsonDeserializer<List<String>> {
+    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): List<String> {
         val array = json?.asJsonObject?.get("V")?.asJsonArray?.map<JsonElement, String> {
             gson.fromJson(
                 it
@@ -27,6 +27,6 @@ class VListLPairDeserializer : JsonDeserializer<Pair<String, String>> {
                     .get("L"), String::class.java
             )
         }?.toList() ?: emptyList()
-        return array[0] to array[1]
+        return array
     }
 }
