@@ -26,7 +26,7 @@ data class Lesson(
     val color: String,
     @SerializedName("ListeContenus")
     @JsonAdapter(VListLListDeserializer::class)
-    private val courseInfo: List<String>
+    val courseInfo: List<String>
 ) {
     val date: LocalDate
         get() = LocalDate.parse(dateString, DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"))
