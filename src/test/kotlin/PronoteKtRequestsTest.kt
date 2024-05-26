@@ -1,5 +1,7 @@
+import fr.xibalba.pronoteKt.Period
 import fr.xibalba.pronoteKt.PronoteKt
 import fr.xibalba.pronoteKt.SessionType
+import fr.xibalba.pronoteKt.getNotes
 import fr.xibalba.pronoteKt.getTimetable
 import kotlinx.coroutines.test.runTest
 
@@ -14,13 +16,19 @@ class PronoteKtRequestsTest {
     private val pronoteKt = PronoteKt("https://demo.index-education.net/pronote", SessionType.STUDENT)
 
     @BeforeAll
-    fun init() = runTest {
+    fun init(): Unit = runTest {
         assert(pronoteKt.login("demonstration", "pronotevs"))
     }
 
     @Test
-    fun testGetTimetable() = runTest {
+    fun testGetTimetable(): Unit = runTest {
         val timetable = pronoteKt.getTimetable()
         assertNotEquals(timetable.size, 0)
+    }
+
+    @Test
+    fun testGetNotes(): Unit = runTest {
+        val notes = pronoteKt.getNotes(Period.FIRST_TRIMESTER)
+        assertNotEquals(notes.notes.size, 0)
     }
 }

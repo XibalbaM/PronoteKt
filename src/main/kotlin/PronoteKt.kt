@@ -47,6 +47,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     private var rsaExponent: Int? = null
     private var userData: JsonObject? = null
     var identifiantNav: String = ""
+    var parameters: JsonObject? = null
     var key = "".toByteArray()
     var iv = ByteArray(16)
     var entUsername: String? = null
@@ -57,6 +58,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         val uuid1 = getUuid()
         val response = doRequest("FonctionParametres", mapOf("Uuid" to uuid1.first))
         identifiantNav = response?.get("identifiantNav")?.asString ?: return false.also { println("Error while initializing session") }
+        parameters = response.asJsonObject
         iv = uuid1.second
         return true
     }
@@ -101,14 +103,18 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
 
     suspend fun login(username: String, password: String): Boolean {
         if (isLogged()) return true
-        return if (ent?.complexMethod != null) {
+        if (if (ent?.complexMethod != null) {
             ent.complexMethod.invoke(this)
         } else {
             normalLogin(username, password)
+        }) {
+            getUserData()
+            return true
+        } else {
+            return false
         }
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     private suspend fun normalLogin(username: String, password: String): Boolean {
         //ENT
         if (ent?.params?.url != null) initEnt(ent.params.url, username, password)
@@ -193,7 +199,6 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         }
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     private fun getNumeroOrdre(): String {
         val numeroOrdre = aesEncrypt(requestCounter.toString().toByteArray()).toHexString()
         requestCounter += 2
@@ -219,11 +224,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         if (otherData.isNotEmpty()) {
             builder.append("\"donnees\": {")
             otherData.forEach { (key, value) ->
-                if (value is String) {
-                    builder.append("\"$key\":\"$value\",")
-                } else {
-                    builder.append("\"$key\":$value,")
-                }
+                builder.append("\"$key\":${gson.toJson(value)},")
             }
             builder.deleteCharAt(builder.length - 1)
             builder.append("},")
@@ -266,11 +267,11 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         }
     }
 
-    suspend fun getUserData(): JsonObject? = requireLogin {
-        if (userData != null) userData
+    suspend fun getUserData(): JsonObject = requireLogin {
+        if (this.userData != null) return@requireLogin this.userData!!
         val response = doRequest("ParametresUtilisateur")
-        userData = response
-        userData
+        this.userData = response
+        this.userData!!
     }
 
     suspend fun <T> requireLogin(function: suspend PronoteKt.() -> T): T {

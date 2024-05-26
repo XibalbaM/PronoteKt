@@ -30,3 +30,19 @@ class VListLListDeserializer : JsonDeserializer<List<String>> {
         return array
     }
 }
+
+class CustomFloatDeserializer : JsonDeserializer<Float> {
+    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): Float {
+        return try {
+            json?.asString?.replace(',', '.')?.toFloat() ?: -1f
+        } catch (_: NumberFormatException) {
+            -1f
+        }
+    }
+}
+
+class VLDeserializer<T> : JsonDeserializer<T> {
+    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): T {
+        return gson.fromJson(json?.asJsonObject?.get("V")?.asJsonObject?.get("L"), typeOfT)
+    }
+}

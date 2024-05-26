@@ -11,20 +11,20 @@ class PronoteKtTest {
     private val pronoteKt = PronoteKt("https://demo.index-education.net/pronote", SessionType.STUDENT)
 
     @Test
-    fun testGetSessionId() = runTest {
+    fun testGetSessionId(): Unit = runTest {
         assertNotEquals(-1, pronoteKt.getSessionId())
     }
 
     @Test
     fun testCreateJsonForRequest() {
         val json = pronoteKt.createJsonForRequest("test.log", 1, "1")
-        assertEquals("{\"nom\":\"test.log\",\"session\":1,\"numeroOrdre\":\"1\"}", json.toString())
+        assertEquals("{\"nom\":\"test.log\",\"session\":1,\"numeroOrdre\":\"1\",\"donneesSec\":{}}", json.toString())
         val json2 = pronoteKt.createJsonForRequest("test.log", 1, "1", mapOf("test.log" to "test.log"))
         assertEquals("{\"nom\":\"test.log\",\"session\":1,\"numeroOrdre\":\"1\",\"donneesSec\":{\"donnees\":{\"test.log\":\"test.log\"}}}", json2.toString())
     }
 
     @Test
-    fun testRsaKeys() = runTest {
+    fun testRsaKeys(): Unit = runTest {
         assertNotNull(pronoteKt.getRsaModulo())
         assertNotNull(pronoteKt.getRsaExponent())
     }
@@ -36,17 +36,17 @@ class PronoteKtTest {
     }
 
     @Test
-    fun testInit() = runTest {
+    fun testInit(): Unit = runTest {
         assert(pronoteKt.initSession())
     }
 
     @Test
-    fun testLogin() = runTest {
+    fun testLogin(): Unit = runTest {
         assert(pronoteKt.login("demonstration", "pronotevs"))
     }
 
     @Test
-    fun testGetUserData() = runTest {
+    fun testGetUserData(): Unit = runTest {
         pronoteKt.login("demonstration", "pronotevs")
         assertNotNull(pronoteKt.getUserData())
     }
