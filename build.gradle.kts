@@ -10,6 +10,7 @@ version = "1.1"
 
 repositories {
     mavenCentral()
+    maven ("https://jitpack.io")
 }
 
 dependencies {
@@ -30,11 +31,24 @@ tasks.test {
 }
 
 kotlin {
-    jvmToolchain(8)
+    jvmToolchain(21)
 }
 
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         freeCompilerArgs.add("-opt-in=kotlin.ExperimentalStdlibApi")
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("jitpack") {
+                from(components["java"])
+                groupId = "fr.xibalba"
+                artifactId = "pronotekt"
+                version = project.version.toString()
+            }
+        }
     }
 }
