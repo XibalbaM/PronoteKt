@@ -107,6 +107,10 @@ enum class Period(val dataName: String, val g: Int) {
     FIRST_TRIMESTER("Trimestre 1", 2),
     SECOND_TRIMESTER("Trimestre 2", 2),
     THIRD_TRIMESTER("Trimestre 3", 2),
+    FIRST_SEMESTER("Semestre 1", 2),
+    SECOND_SEMESTER("Semestre 2", 2),
+    FIRST_SEMESTER_TERM("SEMESTRE 1 Term", 4),
+    SECOND_SEMESTER_TERM("SEMESTRE  2 Term", 4),
     OUT_OF_PERIOD("Hors période", 4);
     //TODO : SEMESTERS AND DATES FROM DATA
 }
