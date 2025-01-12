@@ -68,14 +68,12 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         val entUrlResponse = ktorClient.get(url)
         val entUrlBody: String = entUrlResponse.body()
         val samlRequest = Regex("name=\"SAMLRequest\" value=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)
-        val relayState = Regex("name=\"RelayState\" value=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)
         val loginUrl = Regex("action=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
         val response2 = ktorClient.post(loginUrl!!) {
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(
                 FormDataContent(Parameters.build {
                     append("SAMLRequest", samlRequest!!)
-                    append("RelayState", relayState!!)
                 })
             )
         }
@@ -89,13 +87,11 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         }
         val body3: String = response3.body()
         val samlResponse = Regex("name=\"SAMLResponse\" value=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)
-        val relayStateResponse = Regex("name=\"RelayState\" value=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)
         val url4 = Regex("action=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
         ktorClient.post(url4!!) {
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(FormDataContent(Parameters.build {
                 append("SAMLResponse", samlResponse!!)
-                append("RelayState", relayStateResponse!!)
             }))
         }.body<String>()
         return true
