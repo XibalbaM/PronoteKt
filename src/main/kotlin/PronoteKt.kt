@@ -179,7 +179,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             setBody(body)
         }
         val responseBody: String = response.body()
-        return JsonParser.parseString(responseBody)?.asJsonObject?.getAsJsonObject("donneesSec")?.getAsJsonObject("donnees")
+        return JsonParser.parseString(responseBody)?.asJsonObject?.getAsJsonObject("donneesSec")?.getAsJsonObject("data")
     }
 
     suspend fun getSessionId(): Int {
@@ -222,7 +222,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         builder.append("\"numeroOrdre\":\"$numeroOrdre\",")
         builder.append("\"donneesSec\": {")
         if (otherData.isNotEmpty()) {
-            builder.append("\"donnees\": {")
+            builder.append("\"data\": {")
             otherData.forEach { (key, value) ->
                 builder.append("\"$key\":${gson.toJson(value)},")
             }
@@ -230,7 +230,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             builder.append("},")
         }
         if (page != -1) {
-            builder.append("\"_Signature_\":{")
+            builder.append("\"Signature\":{")
             builder.append("\"onglet\":$page")
             builder.append("}")
         } else if (otherData.isNotEmpty()) {
