@@ -39,13 +39,8 @@ suspend fun PronoteKt.getTimetable(week: Int = getWeekNumber()): Timetable = req
 }
 
 suspend fun PronoteKt.getNotes(period: Period): Notes = requireLogin {
-
-    val periodList = parameters
-        ?.getAsJsonObject("General")
-        ?.getAsJsonArray("ListePeriodes")
-        ?: throw IllegalStateException("Error while getting periods")
-    val periodData = periodList.find { it.asJsonObject.get("L").asString == period.dataName }?.asJsonObject?.get("N")?.asString
-        ?: throw IllegalStateException("Error while getting period data")
+    val periodList = parameters?.getAsJsonObject("General")?.getAsJsonArray("ListePeriodes") ?: throw IllegalStateException("Error while getting periods")
+    val periodData = periodList.find { it.asJsonObject.get("L").asString == period.dataName }?.asJsonObject?.get("N")?.asString ?: throw IllegalStateException("Error while getting period data")
     val timetableResponse = doRequest("DernieresNotes",
         mapOf(
             "Periode" to mapOf(
