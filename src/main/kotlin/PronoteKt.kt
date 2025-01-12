@@ -285,7 +285,7 @@ enum class SessionType(val url: String, val jsUrl: String, val id: Int) {
 }
 
 enum class Ent(val params: NormalEntParams? = null, val complexMethod: (PronoteKt.() -> Boolean)? = null) {
-    AUVERGNE_RHONE_ALPES(NormalEntParams("https://cas.ent.auvergnerhonealpes.fr/login?selection=EDU&service=https://example.com/", NormalEntType.CAS_EDU))
+    AUVERGNE_RHONE_ALPES(NormalEntParams("https://cas.ent.auvergnerhonealpes.fr/login?selection=EDU", NormalEntType.CAS_EDU))
 }
 
 data class NormalEntParams(val url: String, val type: NormalEntType, val redirectForm: Boolean = true)
