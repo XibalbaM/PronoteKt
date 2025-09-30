@@ -18,9 +18,9 @@ class PronoteKtTest {
     @Test
     fun testCreateJsonForRequest() {
         val json = pronoteKt.createJsonForRequest("test.log", 1, "1")
-        assertEquals("{\"nom\":\"test.log\",\"session\":1,\"numeroOrdre\":\"1\",\"donneesSec\":{}}", json.toString())
+        assertEquals("{\"id\":\"test.log\",\"session\":1,\"no\":\"1\",\"dataSec\":{}}", json.toString())
         val json2 = pronoteKt.createJsonForRequest("test.log", 1, "1", mapOf("test.log" to "test.log"))
-        assertEquals("{\"nom\":\"test.log\",\"session\":1,\"numeroOrdre\":\"1\",\"donneesSec\":{\"donnees\":{\"test.log\":\"test.log\"}}}", json2.toString())
+        assertEquals("{\"id\":\"test.log\",\"session\":1,\"no\":\"1\",\"dataSec\":{\"data\":{\"test.log\":\"test.log\"}}}", json2.toString())
     }
 
     @Test

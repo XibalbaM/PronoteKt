@@ -69,6 +69,7 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
         val entUrlBody: String = entUrlResponse.body()
         val samlRequest = Regex("name=\"SAMLRequest\" value=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)
         val loginUrl = Regex("action=\"([^\"]+)\"").find(entUrlBody)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
+        println("Request 1")
         val response2 = ktorClient.post(loginUrl!!) {
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(
@@ -77,17 +78,34 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
                 })
             )
         }
+        println("Request 2")
+        val response25 = ktorClient.get(response2.headers["Location"]!!)
+        val csrfToken = Regex("name=\"csrf_token\" value=\"([^\"]+)\"").find(response25.body<String>())?.groupValues?.get(1)
+        println("Request 3")
         val response3 = ktorClient.post(response2.headers["Location"]!!) {
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(FormDataContent(Parameters.build {
+                append("csrf_token", csrfToken!!)
+                append("_eventId_proceed", "")
+            }))
+        }
+        println("Request 4")
+        val response35 = ktorClient.get(response3.headers["Location"]!!)
+        val csrfToken2 = Regex("name=\"csrf_token\" value=\"([^\"]+)\"").find(response35.body<String>())?.groupValues?.get(1)
+        println("Request 5")
+        val response4 = ktorClient.post(response3.headers["Location"]!!) {
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(FormDataContent(Parameters.build {
+                append("csrf_token", csrfToken2!!)
                 append("j_username", username)
                 append("j_password", password)
                 append("_eventId_proceed", "")
             }))
         }
-        val body3: String = response3.body()
-        val samlResponse = Regex("name=\"SAMLResponse\" value=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)
-        val url4 = Regex("action=\"([^\"]+)\"").find(body3)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
+        val body4: String = response4.body()
+        val samlResponse = Regex("name=\"SAMLResponse\" value=\"([^\"]+)\"").find(body4)?.groupValues?.get(1)
+        val url4 = Regex("action=\"([^\"]+)\"").find(body4)?.groupValues?.get(1)?.replace("&#x3a;", ":")?.replace("&#x2f;", "/")
+        println("Request 6")
         ktorClient.post(url4!!) {
             contentType(ContentType.Application.FormUrlEncoded)
             setBody(FormDataContent(Parameters.build {
@@ -100,10 +118,11 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     suspend fun login(username: String, password: String): Boolean {
         if (isLogged()) return true
         if (if (ent?.complexMethod != null) {
-            ent.complexMethod.invoke(this)
-        } else {
-            normalLogin(username, password)
-        }) {
+                ent.complexMethod.invoke(this)
+            } else {
+                normalLogin(username, password)
+            }
+        ) {
             getUserData()
             return true
         } else {
@@ -175,24 +194,19 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             setBody(body)
         }
         val responseBody: String = response.body()
-        return JsonParser.parseString(responseBody)?.asJsonObject?.getAsJsonObject("donneesSec")?.getAsJsonObject("data")
+        return JsonParser.parseString(responseBody)?.asJsonObject?.getAsJsonObject("dataSec")?.getAsJsonObject("data")
     }
 
     suspend fun getSessionId(): Int {
-        try {
-            if (sessionId != null) return sessionId!!
-            val sessionIdResponse = ktorClient.get("$pronoteUrl${sessionType.url}")
-            val body: String = sessionIdResponse.body()
-            sessionId = Regex("h:'(\\d+)'").find(body)?.groupValues?.get(1)?.toInt()
-            if (ent != null) {
-                entUsername = Regex("e:'([^']+)'").find(body)?.groupValues?.get(1)
-                entPassword = Regex("f:'([^']+)'").find(body)?.groupValues?.get(1)
-            }
-            return sessionId!!
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return -1
+        if (sessionId != null) return sessionId!!
+        val sessionIdResponse = ktorClient.get("$pronoteUrl${sessionType.url}")
+        val body: String = sessionIdResponse.body()
+        sessionId = Regex("h:(\\d+)").find(body)?.groupValues?.get(1)?.toInt()
+        if (ent != null) {
+            entUsername = Regex("e:'([^']+)'").find(body)?.groupValues?.get(1)
+            entPassword = Regex("f:'([^']+)'").find(body)?.groupValues?.get(1)
         }
+        return sessionId!!
     }
 
     private fun getNumeroOrdre(): String {
@@ -213,10 +227,10 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
     fun createJsonForRequest(name: String, sessionId: Int, numeroOrdre: String, otherData: Map<String, Any> = emptyMap(), page: Int = -1): JsonObject {
         val builder = StringBuilder()
         builder.append("{")
-        builder.append("\"nom\":\"$name\",")
+        builder.append("\"id\":\"$name\",")
         builder.append("\"session\":$sessionId,")
-        builder.append("\"numeroOrdre\":\"$numeroOrdre\",")
-        builder.append("\"donneesSec\": {")
+        builder.append("\"no\":\"$numeroOrdre\",")
+        builder.append("\"dataSec\": {")
         if (otherData.isNotEmpty()) {
             builder.append("\"data\": {")
             otherData.forEach { (key, value) ->
