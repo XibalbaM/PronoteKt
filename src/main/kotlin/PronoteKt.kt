@@ -103,7 +103,15 @@ class PronoteKt(private val pronoteUrl: String, private val sessionType: Session
             }))
         }
         while (response4.status == HttpStatusCode.Found) {
-            response4 = ktorClient.get(response4.headers["Location"]!!)
+            response4 = ktorClient.post(response4.headers["Location"]!!) {
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(FormDataContent(Parameters.build {
+                    append("csrf_token", csrfToken2!!)
+                    append("j_username", username)
+                    append("j_password", password)
+                    append("_eventId_proceed", "")
+                }))
+            }
         }
         val body4: String = response4.body()
         val samlResponse = Regex("name=\"SAMLResponse\" value=\"([^\"]+)\"").find(body4)?.groupValues?.get(1)
